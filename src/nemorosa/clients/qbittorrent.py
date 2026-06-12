@@ -130,7 +130,16 @@ class QBittorrentClient(TorrentClient):
         if downloader_config.api_key or (
             downloader_config.username and downloader_config.password
         ):
-            self.client.auth_log_in()
+            try:
+                self.client.auth_log_in()
+            except qbittorrentapi.exceptions.LoginFailed as e:
+                # Intercept false-positive exceptions caused by qBittorrent 5.2's HTTP 204 response format
+                session = getattr(self.client, '_Client__requests_session', None)
+                last_resp = getattr(session, 'last_response', None) if session else None
+                if last_resp and last_resp.status_code == 204:
+                    logger.info("Successfully intercepted qBittorrent 5.2 login status (HTTP 204). Proceeding.")
+                else:
+                    raise e
 
         # Initialize sync state for incremental updates
         self._last_rid = 0
